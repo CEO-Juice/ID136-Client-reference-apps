@@ -40,6 +40,7 @@ Nothing else is synced: later edits, notes and status changes other than complet
 **ID136 API key** (ask your dealer):
 - The key must be allowed to read and create service calls (`AllowReadServiceCalls` and `AllowUpdateServiceCalls`).
 - It must be scoped to your customer account(s); you only see and create calls for those customers.
+- The app can sign in with the key itself, or with the key's API username and password. With a username and password it gets a bearer token from `POST api/auth/token` (valid 60 minutes, renewed automatically) and sends that instead of the key. Use the username and password if your dealer has turned on bearer-token-only access, or if you'd rather the credential that travels on every request expire on its own.
 
 **ServiceNow:**
 - An OAuth application (client id and secret) with the password grant enabled.
@@ -54,7 +55,8 @@ Settings live in `appsettings.json`. Put real secrets in `appsettings.local.json
 | Setting | Meaning |
 |---|---|
 | `Id136.BaseUrl` | ID136 API address, e.g. `https://devclientsapi.ceojuice.com/` |
-| `Id136.ApiKey` | Your ID136 API key |
+| `Id136.ApiKey` | Your ID136 API key. Leave it as is when you use a username and password |
+| `Id136.Username` / `Password` | Your ID136 API username and password, to sign in with a bearer token instead of the API key. Leave `Username` empty to use the API key |
 | `Id136.CallType` | e-automate call type code for calls created from incidents (optional) |
 | `Id136.CompletedStatuses` | e-automate statuses that close the incident. Default `OKB, I, CMP, C` |
 | `ServiceNow.BaseUrl` | Your instance, e.g. `https://yourinstance.service-now.com/` |
@@ -105,6 +107,7 @@ Or schedule `python3 /path/to/PublicSnowSyncClientPython/sync.py` (cron, Windows
 This is a reference app: it shows how the APIs fit together and leaves out what a production service needs. Each item below is also marked `PRODUCTION NOTE:` in the code, where the change would go.
 
 - **Secrets.** `appsettings.local.json` is a plain file. Load secrets from a secret store (environment variables, the `keyring` package, Azure Key Vault, AWS Secrets Manager, ...) and never commit them.
+- **ID136 sign-in.** With a username and password, the token is kept in memory for one run and renewed 5 minutes before it expires. The token endpoint is rate limited, so keep reusing the token rather than asking for one per request.
 - **ServiceNow sign-in.** The password grant needs the integration user's password, and the token is never refreshed. Prefer an auth method without a stored user password if your instance allows it, refresh the token before it expires, and give the integration user only the roles it needs.
 - **HTTPS.** Settings aren't checked for `https`. Make sure both base URLs use it.
 - **One run at a time.** Nothing stops two runs from overlapping, which can create duplicates. Use a lock, or set your scheduler not to start a new instance while one is running.

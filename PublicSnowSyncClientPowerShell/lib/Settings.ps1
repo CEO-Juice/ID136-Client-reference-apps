@@ -41,13 +41,19 @@ function Get-MissingSettings {
 
     $required = [ordered]@{
         'Id136:BaseUrl'              = $Settings.Id136.BaseUrl
-        'Id136:ApiKey'               = $Settings.Id136.ApiKey
         'ServiceNow:BaseUrl'         = $Settings.ServiceNow.BaseUrl
         'ServiceNow:ClientId'        = $Settings.ServiceNow.ClientId
         'ServiceNow:ClientSecret'    = $Settings.ServiceNow.ClientSecret
         'ServiceNow:Username'        = $Settings.ServiceNow.Username
         'ServiceNow:Password'        = $Settings.ServiceNow.Password
         'ServiceNow:AssignmentGroup' = $Settings.ServiceNow.AssignmentGroup
+    }
+
+    if (Test-Id136UsesToken $Settings.Id136) {
+        $required.Insert(1, 'Id136:Password', $Settings.Id136.Password)
+    }
+    else {
+        $required.Insert(1, 'Id136:ApiKey (or Id136:Username and Id136:Password)', $Settings.Id136.ApiKey)
     }
 
     $missing = @()

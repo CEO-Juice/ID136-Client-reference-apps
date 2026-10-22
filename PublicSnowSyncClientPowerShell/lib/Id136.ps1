@@ -1,5 +1,6 @@
 # Talks to the ID136 Client Services API, which reads and creates e-automate service calls.
-# Every request carries the API key in the "eaapikey" header. JSON property names are camelCase.
+# Every request carries either the API key in the "eaapikey" header or, when a username is set,
+# a bearer token from POST api/auth/token. JSON property names are camelCase.
 #
 # A service call looks like:
 #   { callId, callNumber, status, description, notes, caller, date, closeDate, lastUpdate,
@@ -7,6 +8,18 @@
 # status is padded with spaces in e-automate ("I "), so always compare it trimmed.
 
 $Id136PageSize = 1000  # the API maximum
+
+# Tokens last 60 minutes and can't be refreshed; get a new one when this little is left.
+$Id136TokenRenewBefore = [TimeSpan]::FromMinutes(5)
+$script:Id136Token = $null
+$script:Id136TokenExpiresUtc = [DateTime]::MinValue
+
+# True when the settings ask for a bearer token (username and password) rather than an API key.
+function Test-Id136UsesToken {
+    param($Settings)
+    $username = [string] $Settings.Username
+    return -not [string]::IsNullOrWhiteSpace($username) -and -not $username.StartsWith('<')
+}
 
 # With no watermark: all open calls. Otherwise: every call changed since then,
 # in any status (open, completed, canceled). includeDetails adds the equipment serial.
@@ -48,10 +61,17 @@ function New-Id136Call {
 function Invoke-Id136 {
     param($Settings, [string] $Method, [string] $RelativeUrl, $Body)
 
+    if (Test-Id136UsesToken $Settings) {
+        $headers = @{ Authorization = "Bearer $(Get-Id136Token $Settings)"; Accept = 'application/json' }
+    }
+    else {
+        $headers = @{ eaapikey = $Settings.ApiKey; Accept = 'application/json' }
+    }
+
     $request = @{
         Uri        = "$($Settings.BaseUrl.TrimEnd('/'))/$RelativeUrl"
         Method     = $Method
-        Headers    = @{ eaapikey = $Settings.ApiKey; Accept = 'application/json' }
+        Headers    = $headers
         TimeoutSec = 60
     }
     if ($null -ne $Body) {
@@ -59,4 +79,29 @@ function Invoke-Id136 {
         $request.ContentType = 'application/json; charset=utf-8'
     }
     return Invoke-Api -Name 'ID136' -Request $request
+}
+
+# Exchanges the username and password for a bearer token, reusing it until it is about to expire.
+# PRODUCTION NOTE: the token endpoint is rate limited, so keep reusing the token rather than
+# asking for one per request, and keep the password in a secret store, not in appsettings.
+function Get-Id136Token {
+    param($Settings)
+
+    if ($script:Id136Token -and (Get-Date).ToUniversalTime() -lt $script:Id136TokenExpiresUtc - $Id136TokenRenewBefore) {
+        return $script:Id136Token
+    }
+
+    $request = @{
+        Uri         = "$($Settings.BaseUrl.TrimEnd('/'))/api/auth/token"
+        Method      = 'Post'
+        Headers     = @{ Accept = 'application/json' }
+        Body        = ConvertTo-JsonBody @{ username = $Settings.Username; password = $Settings.Password }
+        ContentType = 'application/json; charset=utf-8'
+        TimeoutSec  = 60
+    }
+    $result = Invoke-Api -Name 'ID136' -Request $request
+    $script:Id136Token = $result.token
+    # PowerShell 7 already parses "expires" into a DateTime; Windows PowerShell 5.1 leaves it a string.
+    $script:Id136TokenExpiresUtc = ([DateTime] $result.expires).ToUniversalTime()
+    return $script:Id136Token
 }

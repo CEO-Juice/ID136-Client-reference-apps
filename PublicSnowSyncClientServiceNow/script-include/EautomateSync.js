@@ -13,7 +13,9 @@
  * other state is the watermark, kept in a system property.
  *
  * Settings are system properties named eautomate.sync.* (see setup/create-properties.js).
- * The ID136 API key is read from an API Key credential record, never from a property.
+ * The ID136 credentials are read from a credential record, never from a property: an API Key
+ * credential (sent as the "eaapikey" header), or a Basic Auth credential whose username and
+ * password are exchanged for a bearer token (POST api/auth/token).
  *
  * Written in ES5 so it works in the global scope on any ServiceNow release.
  *
@@ -29,11 +31,14 @@ EautomateSync.prototype = {
     PAGE_SIZE: 1000,                 // ID136 maximum
     TIMEOUT_MS: 60000,
     WATERMARK_OVERLAP_SECONDS: 15 * 60,
+    TOKEN_LIFETIME_MS: 55 * 60 * 1000, // ID136 tokens last 60 minutes; renew a little early
     OPEN_STATUSES: ['P', 'D', 'A', 'H'],
 
     initialize: function() {
         this.baseUrl = this._property('id136.base_url', '').replace(/\/+$/, '');
-        this.apiKey = this._readApiKey(this._property('id136.credential', ''));
+        this.credential = this._readCredential(this._property('id136.credential', ''));
+        this.token = null;
+        this.tokenFetchedAt = 0;
         this.callType = this._property('id136.call_type', '');
         this.completedStatuses = this._list(this._property('id136.completed_statuses', 'OKB,I,CMP,C'));
         this.groupName = this._property('assignment_group', '');
@@ -47,8 +52,8 @@ EautomateSync.prototype = {
     // Entry point for the scheduled job. Returns true when everything synced.
     run: function() {
         try {
-            if (!this.baseUrl || !this.apiKey || !this.groupName) {
-                this._log('error', 'Missing settings: check the eautomate.sync.* system properties and the API key credential');
+            if (!this.baseUrl || !this.credential || !this.groupName) {
+                this._log('error', 'Missing settings: check the eautomate.sync.* system properties and the ID136 credential');
                 return false;
             }
             var groupId = this._findGroupId(this.groupName);
@@ -249,10 +254,36 @@ EautomateSync.prototype = {
     // with retry settings. If ID136 is only reachable from your network, route it through a MID Server
     // (request.setMIDServer).
     _id136: function(method, relativeUrl, body) {
+        var headers = {};
+        if (this.credential.apiKey) {
+            headers.eaapikey = this.credential.apiKey;
+        } else {
+            headers.Authorization = 'Bearer ' + this._getToken();
+        }
+        return this._send(method, relativeUrl, body, headers);
+    },
+
+    // Exchanges the credential's username and password for a bearer token, reusing it until it is
+    // about to expire. The endpoint is rate limited, so never ask for one per request.
+    _getToken: function() {
+        var now = new Date().getTime();
+        if (this.token && now - this.tokenFetchedAt < this.TOKEN_LIFETIME_MS) {
+            return this.token;
+        }
+        var result = this._send('post', 'api/auth/token',
+            { username: this.credential.username, password: this.credential.password }, {});
+        this.token = result.token;
+        this.tokenFetchedAt = now;
+        return this.token;
+    },
+
+    _send: function(method, relativeUrl, body, headers) {
         var request = new sn_ws.RESTMessageV2();
         request.setEndpoint(this.baseUrl + '/' + relativeUrl);
         request.setHttpMethod(method);
-        request.setRequestHeader('eaapikey', this.apiKey);
+        for (var name in headers) {
+            request.setRequestHeader(name, headers[name]);
+        }
         request.setRequestHeader('Accept', 'application/json');
         request.setHttpTimeout(this.TIMEOUT_MS);
         if (body) {
@@ -268,12 +299,19 @@ EautomateSync.prototype = {
         return JSON.parse(response.getBody());
     },
 
-    // The key lives in an API Key credential (Connections & Credentials > Credentials), so it is
-    // stored encrypted and never appears in a property, script or log.
-    _readApiKey: function(credentialSysId) {
-        if (!credentialSysId) return '';
+    // The secrets live in a credential record (Connections & Credentials > Credentials), so they are
+    // stored encrypted and never appear in a property, script or log. An API Key credential gives
+    // { apiKey }; a Basic Auth credential gives { username, password }. Null when neither is usable.
+    _readCredential: function(credentialSysId) {
+        if (!credentialSysId) return null;
         var credential = new sn_cc.StandardCredentialsProvider().getCredentialByID(credentialSysId);
-        return credential ? credential.getAttribute('api_key') : '';
+        if (!credential) return null;
+        var apiKey = credential.getAttribute('api_key');
+        if (apiKey) return { apiKey: apiKey };
+        var username = credential.getAttribute('user_name');
+        var password = credential.getAttribute('password');
+        if (username && password) return { username: username, password: password };
+        return null;
     },
 
     // ---------- ServiceNow lookups ----------
@@ -346,7 +384,7 @@ EautomateSync.prototype = {
 
     // Shows up in System Logs > System Log > All, with source "EautomateSync".
     // (In the global scope these take a source; gs.info/gs.warn/gs.error don't.)
-    // Never log this.apiKey or request headers.
+    // Never log this.credential, this.token or request headers.
     _log: function(level, message) {
         if (level === 'error') gs.logError(message, 'EautomateSync');
         else if (level === 'warn') gs.logWarning(message, 'EautomateSync');

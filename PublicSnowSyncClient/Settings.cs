@@ -23,7 +23,10 @@ public class Settings
         }
 
         Check("Id136:BaseUrl", Id136.BaseUrl);
-        Check("Id136:ApiKey", Id136.ApiKey);
+        if (Id136.UsesToken)
+            Check("Id136:Password", Id136.Password);
+        else
+            Check("Id136:ApiKey (or Id136:Username and Id136:Password)", Id136.ApiKey);
         Check("ServiceNow:BaseUrl", ServiceNow.BaseUrl);
         Check("ServiceNow:ClientId", ServiceNow.ClientId);
         Check("ServiceNow:ClientSecret", ServiceNow.ClientSecret);
@@ -38,9 +41,16 @@ public class Settings
 
 public class Id136Settings
 {
-    // e.g. https://devclientsapi.ceojuice.com/  (your dealer gives you this and the API key)
+    // e.g. https://devclientsapi.ceojuice.com/  (your dealer gives you this and your credentials)
     public string BaseUrl { get; set; } = "";
+
+    // Set either ApiKey, or Username and Password. With a username, the app exchanges the
+    // username and password for a bearer token (POST api/auth/token) instead of sending the key.
     public string ApiKey { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+
+    public bool UsesToken => !string.IsNullOrWhiteSpace(Username) && !Username.StartsWith('<');
 
     // e-automate call type code for calls created from ServiceNow incidents (optional).
     public string CallType { get; set; } = "";

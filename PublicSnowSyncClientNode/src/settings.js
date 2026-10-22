@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { usesToken } from './id136Client.js';
 
 // Reads appsettings.json, then appsettings.local.json (optional, not committed) on top of it
 // for real secrets. Both files live in the app folder.
@@ -28,7 +29,9 @@ export function loadSettings(appDir) {
 export function findMissingSettings(settings) {
   const required = {
     'Id136:BaseUrl': settings.Id136.BaseUrl,
-    'Id136:ApiKey': settings.Id136.ApiKey,
+    ...(usesToken(settings.Id136)
+      ? { 'Id136:Password': settings.Id136.Password }
+      : { 'Id136:ApiKey (or Id136:Username and Id136:Password)': settings.Id136.ApiKey }),
     'ServiceNow:BaseUrl': settings.ServiceNow.BaseUrl,
     'ServiceNow:ClientId': settings.ServiceNow.ClientId,
     'ServiceNow:ClientSecret': settings.ServiceNow.ClientSecret,

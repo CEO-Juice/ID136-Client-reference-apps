@@ -46,6 +46,7 @@ The only other state is the watermark, in the system property `eautomate.sync.la
 **ID136 API key** (ask your dealer):
 - The key must be allowed to read and create service calls (`AllowReadServiceCalls` and `AllowUpdateServiceCalls`).
 - It must be scoped to your customer account(s); you only see and create calls for those customers.
+- The script can sign in with the key itself, or with the key's API username and password. With a username and password it gets a bearer token from `POST api/auth/token` (valid 60 minutes) and sends that instead of the key. Use the username and password if your dealer has turned on bearer-token-only access.
 
 **ServiceNow:**
 - An admin to install it, and outbound HTTPS from the instance to the ID136 API address.
@@ -55,7 +56,11 @@ The only other state is the watermark, in the system property `eautomate.sync.la
 
 ## Installing
 
-1. **Store the API key.** Go to **Connections & Credentials > Credentials**, click **New**, and choose **API Key Credentials**. Give it a name (e.g. "e-automate ID136") and paste the key into **API Key**. Save it, then copy its sys_id (right-click the header > **Copy sys_id**).
+1. **Store the ID136 credential.** Go to **Connections & Credentials > Credentials** and click **New**. Give it a name (e.g. "e-automate ID136"), then either:
+   - choose **API Key Credentials** and paste the key into **API Key**, or
+   - choose **Basic Auth Credentials** and enter the API username and password, to sign in with a bearer token.
+
+   Save it, then copy its sys_id (right-click the header > **Copy sys_id**).
 2. **Create the settings.** Open `setup/create-properties.js` and fill in at least the assignment group name and the credential sys_id from step 1. Paste it into **System Definition > Scripts - Background** and run it. You can change the values later under **System Properties** (search for `eautomate.sync`).
 3. **Add the script include.** Go to **System Definition > Script Includes > New**. Set **Name** to `EautomateSync`, leave **Client callable** off, paste in `script-include/EautomateSync.js`, and save.
 4. **Schedule it.** Go to **System Definition > Scheduled Jobs > New > Automatically run a script of your choosing**. Name it "e-automate sync", set **Run** to **Periodically** every 5–15 minutes, set **Run as** to your integration user, paste in `scheduled-job/run-sync.js`, and save.
@@ -68,7 +73,7 @@ All settings are system properties starting with `eautomate.sync.`:
 | Property | Meaning |
 |---|---|
 | `id136.base_url` | ID136 API address, e.g. `https://devclientsapi.ceojuice.com/` |
-| `id136.credential` | sys_id of the API Key credential that holds the ID136 API key |
+| `id136.credential` | sys_id of the ID136 credential: an API Key credential (sends the key), or a Basic Auth credential (username and password, exchanged for a bearer token) |
 | `id136.call_type` | e-automate call type code for calls created from incidents (optional) |
 | `id136.completed_statuses` | e-automate statuses that close the incident. Default `OKB,I,CMP,C` |
 | `assignment_group` | Group name. Its incidents are synced, and new incidents are assigned to it |
@@ -77,13 +82,14 @@ All settings are system properties starting with `eautomate.sync.`:
 | `closed_state` / `close_code` | Values used to close an incident. Defaults `6` / `Solved (Permanently)` |
 | `last_call_update_seen` | Set by the sync (the watermark). Clear it to re-read all open calls |
 
-The API key is never stored in a property, a script or the log. The script reads it from the credential record when it runs.
+The API key and password are never stored in a property, a script or the log. The script reads them from the credential record when it runs.
 
 ## Before using this in production
 
 This is a reference script: it shows how the pieces fit together and leaves out what a production integration needs. Each item below is also marked `PRODUCTION NOTE:` in the code, where the change would go.
 
 - **Scope and packaging.** It's pasted into the global scope by hand. Package it as a scoped application (or at least an update set) so it can be versioned, reviewed and moved between instances, and so its access is limited to what it needs.
+- **ID136 sign-in.** With a Basic Auth credential, each run gets one token and renews it after 55 minutes. The token endpoint is rate limited, so keep reusing the token rather than asking for one per request.
 - **Integration user.** Run the job as a dedicated user with only the roles it needs, not as an admin.
 - **Overlapping runs.** If a run takes longer than the interval, the next one can start and create duplicates. Keep the interval longer than a run, or add a lock.
 - **Retries.** Timeouts, rate limits (HTTP 429) and server errors (5xx) aren't retried within a run. Add retries with backoff, or move the ID136 calls into Flow Designer actions with retry settings. If ID136 is only reachable from your network, route the calls through a MID Server.
@@ -99,4 +105,4 @@ This is a reference script: it shows how the pieces fit together and leaves out 
 - If the API key covers more than one customer, every one of their open calls becomes an incident.
 - Reschedules and cancellations are not synced; only completions are.
 - ID136 matches a new call to an existing one by incident number. If a call already exists for that incident number, even a closed one, ID136 returns it instead of creating a new call.
-- The script uses the global scope and ES5 JavaScript so it works on any release. The API Key credential type and `sn_cc.StandardCredentialsProvider` need a release that has Connections & Credentials (Orlando or later).
+- The script uses the global scope and ES5 JavaScript so it works on any release. The API Key and Basic Auth credential types and `sn_cc.StandardCredentialsProvider` need a release that has Connections & Credentials (Orlando or later).

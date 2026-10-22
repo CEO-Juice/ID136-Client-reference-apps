@@ -8,6 +8,8 @@ AWS Secrets Manager, ...), and never commit them.
 import json
 import os
 
+from id136_client import uses_token
+
 
 def load_settings(app_dir):
     with open(os.path.join(app_dir, "appsettings.json"), encoding="utf-8") as f:
@@ -35,7 +37,8 @@ def find_missing_settings(settings):
     snow = settings["ServiceNow"]
     required = {
         "Id136:BaseUrl": id136.get("BaseUrl"),
-        "Id136:ApiKey": id136.get("ApiKey"),
+        **({"Id136:Password": id136.get("Password")} if uses_token(id136)
+           else {"Id136:ApiKey (or Id136:Username and Id136:Password)": id136.get("ApiKey")}),
         "ServiceNow:BaseUrl": snow.get("BaseUrl"),
         "ServiceNow:ClientId": snow.get("ClientId"),
         "ServiceNow:ClientSecret": snow.get("ClientSecret"),
