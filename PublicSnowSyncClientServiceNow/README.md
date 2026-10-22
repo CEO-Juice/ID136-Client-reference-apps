@@ -67,7 +67,7 @@ All settings are system properties starting with `eautomate.sync.`:
 
 | Property | Meaning |
 |---|---|
-| `id136.base_url` | ID136 API address, e.g. `https://api.ceojuice.com/` |
+| `id136.base_url` | ID136 API address, e.g. `https://devclientsapi.ceojuice.com/` |
 | `id136.credential` | sys_id of the API Key credential that holds the ID136 API key |
 | `id136.call_type` | e-automate call type code for calls created from incidents (optional) |
 | `id136.completed_statuses` | e-automate statuses that close the incident. Default `OKB,I,CMP,C` |

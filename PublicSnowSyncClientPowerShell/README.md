@@ -57,7 +57,7 @@ Settings live in `appsettings.json`. Put real secrets in `appsettings.local.json
 
 | Setting | Meaning |
 |---|---|
-| `Id136.BaseUrl` | ID136 API address, e.g. `https://api.ceojuice.com/` |
+| `Id136.BaseUrl` | ID136 API address, e.g. `https://devclientsapi.ceojuice.com/` |
 | `Id136.ApiKey` | Your ID136 API key |
 | `Id136.CallType` | e-automate call type code for calls created from incidents (optional) |
 | `Id136.CompletedStatuses` | e-automate statuses that close the incident. Default `OKB, I, CMP, C` |

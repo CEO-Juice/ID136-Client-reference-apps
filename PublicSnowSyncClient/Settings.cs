@@ -38,7 +38,7 @@ public class Settings
 
 public class Id136Settings
 {
-    // e.g. https://api.ceojuice.com/  (your dealer gives you this and the API key)
+    // e.g. https://devclientsapi.ceojuice.com/  (your dealer gives you this and the API key)
     public string BaseUrl { get; set; } = "";
     public string ApiKey { get; set; } = "";
 

@@ -8,7 +8,7 @@
  */
 (function() {
     var properties = [
-        ['id136.base_url', 'https://api.ceojuice.com/', 'ID136 API address (from your e-automate dealer)'],
+        ['id136.base_url', 'https://devclientsapi.ceojuice.com/', 'ID136 API address (from your e-automate dealer)'],
         ['id136.credential', '', 'sys_id of the API Key credential holding the ID136 API key'],
         ['id136.call_type', '', 'e-automate call type code for calls created from incidents (optional)'],
         ['id136.completed_statuses', 'OKB,I,CMP,C', 'e-automate call statuses that close the linked incident'],
